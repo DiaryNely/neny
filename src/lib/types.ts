@@ -13,7 +13,7 @@ export const kindLongLabel: Record<Kind, string> = {
   gaj: 'À jeun',
   gpp: 'Post-prandial',
 };
-export const kindDefaultTime: Record<Kind, string> = { gaj: '07:00', gpp: '12:30' };
+export const kindDefaultTime: Record<Kind, string> = { gaj: '06:00', gpp: '12:00' };
 
 export interface Reading {
   id: string;
@@ -24,7 +24,7 @@ export interface Reading {
   slot: Slot | null;
   /** 'HH:mm' */
   time: string;
-  /** Glycémie en g/L */
+  /** Glycémie en mmol/L */
   value: number;
   note: string;
 }

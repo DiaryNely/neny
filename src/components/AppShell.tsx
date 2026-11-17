@@ -29,7 +29,7 @@ export function AppShell({ user, view, onNavigate, toast, children }: Props) {
           <button
             type="button"
             onClick={() => onNavigate('mois')}
-            className="rounded-lg"
+            className="-ml-1 flex h-11 items-center rounded-lg px-1"
             aria-label="Neny, retour au mois"
           >
             <Brand />
@@ -56,7 +56,7 @@ export function AppShell({ user, view, onNavigate, toast, children }: Props) {
           <button
             type="button"
             onClick={() => onNavigate('compte')}
-            className="ml-auto flex h-9 w-9 items-center justify-center rounded-full bg-accent/10 text-[13px] font-medium text-accent ring-1 ring-inset ring-accent/15 transition-colors hover:bg-accent/15"
+            className="ml-auto flex h-11 w-11 items-center justify-center rounded-full bg-accent/10 text-[13px] font-medium text-accent ring-1 ring-inset ring-accent/15 transition-colors hover:bg-accent/15"
             aria-label="Compte"
           >
             {initial}

@@ -10,9 +10,9 @@ export const slotLabel: Record<Slot, string> = {
 
 /** Heure proposée par défaut quand on saisit un relevé d'un autre jour. */
 export const slotDefaultTime: Record<Slot, string> = {
-  matin: '07:30',
-  midi: '12:30',
-  soir: '19:30',
+  matin: '06:00',
+  midi: '12:00',
+  soir: '21:00',
 };
 
 const pad = (n: number) => String(n).padStart(2, '0');
@@ -31,6 +31,13 @@ export function nowTime(): string {
 export function parseISO(iso: string): Date {
   const [y, m, d] = iso.split('-').map(Number);
   return new Date(y, (m ?? 1) - 1, d ?? 1);
+}
+
+/** '2026-11-17' il y a `days` jours. */
+export function isoDaysAgo(days: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() - days);
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
 export function monthKeyOf(iso: string): string {

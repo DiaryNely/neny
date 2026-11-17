@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import type { Kind, Reading } from '../lib/types';
 import { SLOTS, fullDateLabel, isoOf, parseISO, slotLabel } from '../lib/dates';
-import { TARGET_MAX, TARGET_MIN, dotColor, fmtG, mean } from '../lib/glucose';
+import { GAJ_MAX, GAJ_MIN, GPP_MAX, HYPO, dotColor, fmtG, mean, targetBand } from '../lib/glucose';
 
 interface Props {
+  /** Relevés d'un seul type : ce graphe ne trace que le GAJ ou que le GPP. */
   readings: Reading[];
+  kind: Kind;
   monthKey: string;
   days: number;
   onAdd: () => void;
@@ -12,11 +14,10 @@ interface Props {
 
 type Point = { day: number; value: number };
 
-const DOMAIN_MIN = 0.4;
+const DOMAIN_MIN = 3;
+const DOMAIN_MAX_FLOOR = 11;
 
-function formatTick(tick: number): string {
-  return new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 1 }).format(tick);
-}
+const tickFormat = new Intl.NumberFormat('fr-FR');
 
 /** Le graphe est mesuré en pixels : les traits gardent leur épaisseur à toutes les largeurs. */
 function useWidth(ref: RefObject<HTMLDivElement | null>) {
@@ -37,25 +38,7 @@ function useWidth(ref: RefObject<HTMLDivElement | null>) {
   return width;
 }
 
-/** Moyenne du jour pour un type : une seule valeur pour le GAJ, celle du moment pour le GPP. */
-function seriesFor(byDay: Map<number, Reading[]>, kind: Kind): Point[] {
-  const points: Point[] = [];
-
-  for (const day of [...byDay.keys()].sort((a, b) => a - b)) {
-    const values = (byDay.get(day) ?? [])
-      .filter((reading) => reading.kind === kind)
-      .map((reading) => reading.value)
-      .filter(Number.isFinite);
-
-    if (values.length === 0) continue;
-    const average = mean(values);
-    if (average != null) points.push({ day, value: average });
-  }
-
-  return points;
-}
-
-/** Une coupure de plus de deux jours interrompt la ligne. */
+/** Une coupure de plus de deux jours interrompt la courbe. */
 function toSegments(points: Point[]): Point[][] {
   const segments: Point[][] = [];
   let current: Point[] = [];
@@ -72,11 +55,12 @@ function toSegments(points: Point[]): Point[][] {
   return segments;
 }
 
-export function GlucoseChart({ readings, monthKey, days, onAdd }: Props) {
+export function GlucoseChart({ readings, kind, monthKey, days, onAdd }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const width = useWidth(containerRef);
   const [active, setActive] = useState<number | null>(null);
 
+  // Relevés regroupés par jour, dans l'ordre des moments de la journée.
   const byDay = useMemo(() => {
     const map = new Map<number, Reading[]>();
     for (const reading of readings) {
@@ -87,7 +71,6 @@ export function GlucoseChart({ readings, monthKey, days, onAdd }: Props) {
     }
     for (const list of map.values()) {
       list.sort((a, b) => {
-        if (a.kind !== b.kind) return a.kind === 'gaj' ? -1 : 1;
         const ai = a.slot ? SLOTS.indexOf(a.slot) : -1;
         const bi = b.slot ? SLOTS.indexOf(b.slot) : -1;
         return ai - bi;
@@ -96,26 +79,34 @@ export function GlucoseChart({ readings, monthKey, days, onAdd }: Props) {
     return map;
   }, [readings]);
 
-  const gajPoints = useMemo(() => seriesFor(byDay, 'gaj'), [byDay]);
-  const gppPoints = useMemo(() => seriesFor(byDay, 'gpp'), [byDay]);
-  const showsBoth = gajPoints.length > 0 && gppPoints.length > 0;
+  // La courbe passe par la moyenne du jour : une valeur pour le GAJ, celle du moment pour un GPP filtré.
+  const points = useMemo(() => {
+    const list: Point[] = [];
+    for (const day of [...byDay.keys()].sort((a, b) => a - b)) {
+      const average = mean(
+        (byDay.get(day) ?? []).map((reading) => reading.value).filter(Number.isFinite),
+      );
+      if (average != null) list.push({ day, value: average });
+    }
+    return list;
+  }, [byDay]);
 
   const { domainMin, domainMax } = useMemo(() => {
     const values = readings.map((r) => r.value).filter(Number.isFinite);
-    const max = values.length ? Math.max(...values) : 1.4;
-    const min = values.length ? Math.min(...values) : 0.9;
+    const max = values.length ? Math.max(...values) : 9;
+    const min = values.length ? Math.min(...values) : GAJ_MIN;
     return {
-      domainMax: Math.max(1.8, Math.ceil((max + 0.05) * 10) / 10),
-      domainMin: Math.min(DOMAIN_MIN, Math.floor((min - 0.05) * 10) / 10),
+      domainMax: Math.max(DOMAIN_MAX_FLOOR, Math.ceil(max + 0.5)),
+      domainMin: Math.min(DOMAIN_MIN, Math.floor(min - 0.5)),
     };
   }, [readings]);
 
   const W = Math.max(width, 240);
-  const H = W < 560 ? 206 : 252;
-  const padL = 30;
-  const padR = 10;
-  const padT = 12;
-  const padB = 22;
+  const H = W < 560 ? 208 : 246;
+  const padL = 28;
+  const padR = 12;
+  const padT = 14;
+  const padB = 24;
   const plotW = W - padL - padR;
   const plotH = H - padT - padB;
   const span = Math.max(1, days - 1);
@@ -124,20 +115,35 @@ export function GlucoseChart({ readings, monthKey, days, onAdd }: Props) {
   const x = (day: number) => padL + ((day - 1) / span) * plotW;
   const y = (value: number) => padT + ((domainMax - value) / (domainMax - domainMin)) * plotH;
 
-  const ticks = [0.5, 1, 1.5, 2].filter((tick) => tick >= domainMin && tick <= domainMax);
+  const baseY = padT + plotH;
+  const ticks = [2, 4, 6, 8, 10, 12, 14, 16].filter(
+    (tick) => tick >= domainMin && tick <= domainMax,
+  );
   const xTicks = [...new Set([1, 8, 15, 22, days])].filter((day) => day >= 1 && day <= days);
 
+  const [bandMin, bandMax] = targetBand(kind);
   const activeReadings = active != null ? byDay.get(active) ?? [] : [];
   const isEmpty = readings.length === 0;
 
+  // Sur mobile, l'infobulle se ferme dès qu'on fait défiler la page.
+  useEffect(() => {
+    if (active == null) return;
+    const close = () => setActive(null);
+    window.addEventListener('scroll', close, { passive: true });
+    return () => window.removeEventListener('scroll', close);
+  }, [active]);
+
+  const label = kind === 'gaj' ? 'à jeun' : 'post-prandial';
   const summary = isEmpty
-    ? 'Graphique de la glycémie du mois, aucun relevé'
-    : `Glycémie du mois : ${readings.length} relevé${readings.length > 1 ? 's' : ''}`;
+    ? `Graphique ${label} du mois, aucun relevé`
+    : `Glycémie ${label} du mois : ${readings.length} relevé${readings.length > 1 ? 's' : ''}`;
 
   const tooltipLeft = active != null ? Math.min(Math.max(x(active), 88), W - 88) : 0;
 
-  const pathFor = (points: Point[]) =>
-    points.map((point, index) => `${index === 0 ? 'M' : 'L'}${x(point.day)},${y(point.value)}`).join(' ');
+  const linePath = (segment: Point[]) =>
+    segment
+      .map((point, index) => `${index === 0 ? 'M' : 'L'}${x(point.day)},${y(point.value)}`)
+      .join(' ');
 
   return (
     <div ref={containerRef} className="relative touch-pan-y">
@@ -149,34 +155,17 @@ export function GlucoseChart({ readings, monthKey, days, onAdd }: Props) {
         aria-label={summary}
         className="block"
       >
-        {/* Le couloir cible */}
+        {/* La bande cible : GAJ 4,4 – 7,2, GPP 3,9 – 10 */}
         <rect
           x={padL}
-          y={y(TARGET_MAX)}
+          y={y(bandMax)}
           width={plotW}
-          height={Math.max(0, y(TARGET_MIN) - y(TARGET_MAX))}
+          height={Math.max(0, y(bandMin) - y(bandMax))}
           fill="var(--color-accent)"
-          fillOpacity={0.08}
-        />
-        <line
-          x1={padL}
-          x2={padL + plotW}
-          y1={y(TARGET_MAX)}
-          y2={y(TARGET_MAX)}
-          stroke="var(--color-accent)"
-          strokeOpacity={0.35}
-          strokeDasharray="3 3"
-        />
-        <line
-          x1={padL}
-          x2={padL + plotW}
-          y1={y(TARGET_MIN)}
-          y2={y(TARGET_MIN)}
-          stroke="var(--color-accent)"
-          strokeOpacity={0.35}
-          strokeDasharray="3 3"
+          fillOpacity={0.1}
         />
 
+        {/* Grille horizontale */}
         {ticks.map((tick) => (
           <g key={tick}>
             <line
@@ -195,25 +184,94 @@ export function GlucoseChart({ readings, monthKey, days, onAdd }: Props) {
               fill="var(--color-muted)"
               className="tnum"
             >
-              {formatTick(tick)}
+              {tickFormat.format(tick)}
             </text>
           </g>
         ))}
 
+        {/* Grille verticale, alignée sur les jours gradués */}
+        {xTicks.map((day) => (
+          <line
+            key={`grid-${day}`}
+            x1={x(day)}
+            x2={x(day)}
+            y1={padT}
+            y2={baseY}
+            stroke="var(--color-line)"
+            strokeOpacity={0.7}
+            strokeWidth={1}
+          />
+        ))}
+
+        {kind === 'gaj' ? (
+          <>
+            <line
+              x1={padL}
+              x2={padL + plotW}
+              y1={y(GAJ_MAX)}
+              y2={y(GAJ_MAX)}
+              stroke="var(--color-accent)"
+              strokeOpacity={0.4}
+              strokeDasharray="3 3"
+            />
+            <line
+              x1={padL}
+              x2={padL + plotW}
+              y1={y(GAJ_MIN)}
+              y2={y(GAJ_MIN)}
+              stroke="var(--color-accent)"
+              strokeOpacity={0.4}
+              strokeDasharray="3 3"
+            />
+          </>
+        ) : (
+          <line
+            x1={padL}
+            x2={padL + plotW}
+            y1={y(GPP_MAX)}
+            y2={y(GPP_MAX)}
+            stroke="var(--color-warn)"
+            strokeOpacity={0.55}
+            strokeDasharray="5 3"
+          />
+        )}
+
+        {/* Seuil d'hypoglycémie */}
         <line
           x1={padL}
           x2={padL + plotW}
-          y1={padT + plotH}
-          y2={padT + plotH}
+          y1={y(HYPO)}
+          y2={y(HYPO)}
+          stroke="var(--color-low)"
+          strokeOpacity={0.5}
+          strokeDasharray="5 3"
+        />
+        <text
+          x={padL + plotW - 2}
+          y={y(HYPO) + 10}
+          textAnchor="end"
+          fontSize={9.5}
+          fill="var(--color-low)"
+          className="tnum"
+        >
+          3,9
+        </text>
+
+        {/* Axe de base + jours */}
+        <line
+          x1={padL}
+          x2={padL + plotW}
+          y1={baseY}
+          y2={baseY}
           stroke="var(--color-line-strong)"
           strokeWidth={1}
         />
 
         {xTicks.map((day) => (
           <text
-            key={day}
+            key={`tick-${day}`}
             x={x(day)}
-            y={H - 6}
+            y={H - 7}
             textAnchor={day === 1 ? 'start' : day === days ? 'end' : 'middle'}
             fontSize={10}
             fill="var(--color-muted)"
@@ -223,43 +281,30 @@ export function GlucoseChart({ readings, monthKey, days, onAdd }: Props) {
           </text>
         ))}
 
-        {toSegments(gppPoints).map((segment) => (
+        {/* La courbe, jour par jour */}
+        {toSegments(points).map((segment) => (
           <path
-            key={`gpp-${segment[0].day}`}
-            d={pathFor(segment)}
+            key={`line-${segment[0].day}`}
+            d={linePath(segment)}
             fill="none"
             stroke="var(--color-accent)"
-            strokeWidth={2}
-            strokeOpacity={showsBoth ? 0.55 : 1}
-            strokeDasharray={showsBoth ? '4 3' : undefined}
+            strokeWidth={2.5}
             strokeLinecap="round"
             strokeLinejoin="round"
           />
         ))}
 
-        {toSegments(gajPoints).map((segment) => (
-          <path
-            key={`gaj-${segment[0].day}`}
-            d={pathFor(segment)}
-            fill="none"
-            stroke="var(--color-accent)"
-            strokeWidth={2}
-            strokeDasharray={showsBoth ? undefined : '4 3'}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        ))}
-
+        {/* Un point par relevé, coloré selon la cible */}
         {[...byDay.entries()].flatMap(([day, list]) =>
           list.map((reading) => (
             <circle
               key={reading.id}
               cx={x(day)}
               cy={y(reading.value)}
-              r={2.6}
-              fill={dotColor(reading.value)}
+              r={3.2}
+              fill={dotColor(reading.value, reading.kind)}
               stroke="var(--color-card)"
-              strokeWidth={1}
+              strokeWidth={1.5}
             />
           )),
         )}
@@ -269,9 +314,9 @@ export function GlucoseChart({ readings, monthKey, days, onAdd }: Props) {
             x1={x(active)}
             x2={x(active)}
             y1={padT}
-            y2={padT + plotH}
+            y2={baseY}
             stroke="var(--color-ink)"
-            strokeOpacity={0.18}
+            strokeOpacity={0.22}
             strokeWidth={1}
           />
         )}
@@ -285,7 +330,7 @@ export function GlucoseChart({ readings, monthKey, days, onAdd }: Props) {
             width={step}
             height={plotH}
             fill="transparent"
-            onPointerDown={() => setActive(day)}
+            onPointerDown={() => setActive((current) => (current === day ? null : day))}
             onPointerEnter={(event) => {
               if (event.pointerType === 'mouse') setActive(day);
             }}
@@ -307,10 +352,10 @@ export function GlucoseChart({ readings, monthKey, days, onAdd }: Props) {
               <p key={reading.id} className="flex items-center gap-1.5 text-[11px] text-white/80">
                 <span
                   className="h-1.5 w-1.5 rounded-full"
-                  style={{ background: dotColor(reading.value) }}
+                  style={{ background: dotColor(reading.value, reading.kind) }}
                 />
-                <span className="text-white">{reading.kind === 'gaj' ? 'GAJ' : 'GPP'}</span>
                 {reading.slot && <span className="text-white/55">{slotLabel[reading.slot]}</span>}
+                <span className="text-white/55 tnum">{reading.time}</span>
                 <span className="tnum ml-auto pl-3 text-[13px] text-white">
                   {fmtG(reading.value)}
                 </span>

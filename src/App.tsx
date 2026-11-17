@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { signOut } from 'firebase/auth';
 import { auth, firebaseConfigured } from './lib/firebase';
 import { useAuth } from './hooks/useAuth';
-import { useMonthReadings } from './hooks/useReadings';
+import { useMonthReadings, useRecentReadings } from './hooks/useReadings';
 import { currentMonthKey, monthKeyOf } from './lib/dates';
 import type { Slot } from './lib/dates';
 import type { Reading } from './lib/types';
@@ -34,6 +34,9 @@ function Root() {
     loading: dataLoading,
     error,
   } = useMonthReadings(user?.uid ?? null, monthKey);
+
+  // 90 jours : la période de l'HbA1c estimée.
+  const { readings: recent } = useRecentReadings(user?.uid ?? null);
 
   useEffect(() => {
     window.scrollTo({ top: 0 });
@@ -68,6 +71,7 @@ function Root() {
         <MonthDashboard
           readings={readings}
           previous={previous}
+          recent={recent}
           loading={dataLoading}
           error={error}
           monthKey={monthKey}

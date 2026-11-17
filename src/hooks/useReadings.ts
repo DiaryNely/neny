@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { collection, onSnapshot, query, where, type DocumentData } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { SLOTS, monthRange, shiftMonth } from '../lib/dates';
+import { SLOTS, isoDaysAgo, monthRange, shiftMonth, todayISO } from '../lib/dates';
 import type { Slot } from '../lib/dates';
 import type { Kind, Reading } from '../lib/types';
 
@@ -132,6 +132,42 @@ export function useMonthReadings(uid: string | null, monthKey: string) {
   }, [uid, monthKey]);
 
   return { readings, previous, loading, error };
+}
+
+/**
+ * Relevés des derniers jours (90 par défaut) : sert à l'HbA1c estimée,
+ * qui est la moyenne glycémique des deux à trois derniers mois.
+ */
+export function useRecentReadings(uid: string | null, days = 90) {
+  const [readings, setReadings] = useState<Reading[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!uid) {
+      setReadings([]);
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    const stop = listen(
+      uid,
+      isoDaysAgo(days - 1),
+      todayISO(),
+      (list) => {
+        setReadings(list);
+        setLoading(false);
+      },
+      () => {
+        setReadings([]);
+        setLoading(false);
+      },
+    );
+
+    return stop;
+  }, [uid, days]);
+
+  return { readings, loading };
 }
 
 /** Relevés d'une seule journée : sert à savoir quels créneaux sont déjà saisis. */

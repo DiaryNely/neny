@@ -14,7 +14,7 @@ import {
 } from '../lib/types';
 import { SLOTS, longDateLabel, slotDefaultTime, slotLabel, todayISO } from '../lib/dates';
 import type { Slot } from '../lib/dates';
-import { fmtG, statusOf, statusTone } from '../lib/glucose';
+import { fmtG, statusLabel, statusOf, statusTone } from '../lib/glucose';
 import { CorridorScale } from './CorridorScale';
 import { IconArrowLeft } from './icons';
 
@@ -31,6 +31,8 @@ interface Props {
 const card = 'rounded-2xl border border-line bg-card p-4 shadow-card';
 const field =
   'h-11 w-full min-w-0 rounded-xl border border-line bg-soft/40 px-2.5 tnum transition-colors focus:border-accent/50';
+/* Sous 360 px, l'icône native mange la place du texte : on la retire, le champ reste cliquable. */
+const dateTimeField = `${field} max-[359px]:[&::-webkit-calendar-picker-indicator]:hidden`;
 
 function defaultTimeFor(kind: Kind, slot: Slot): string {
   return kind === 'gaj' ? kindDefaultTime.gaj : slotDefaultTime[slot];
@@ -45,12 +47,14 @@ export function EntryForm({
   onDeleted,
   onCancel,
 }: Props) {
+  const startDate = initial?.date ?? initialDate ?? todayISO();
   const startKind: Kind = initial?.kind ?? (initialSlot ? 'gpp' : 'gaj');
+  const startSlot: Slot = initial?.slot ?? initialSlot ?? 'matin';
 
-  const [date, setDate] = useState(initial?.date ?? initialDate ?? todayISO());
+  const [date, setDate] = useState(startDate);
   const [kind, setKind] = useState<Kind>(startKind);
-  const [slot, setSlot] = useState<Slot>(initial?.slot ?? initialSlot ?? 'matin');
-  const [time, setTime] = useState(initial?.time ?? defaultTimeFor(startKind, initialSlot ?? 'matin'));
+  const [slot, setSlot] = useState<Slot>(startSlot);
+  const [time, setTime] = useState(initial?.time ?? defaultTimeFor(startKind, startSlot));
   const [raw, setRaw] = useState(initial ? String(initial.value).replace('.', ',') : '');
   const [note, setNote] = useState(initial?.note ?? '');
   const [error, setError] = useState<string | null>(null);
@@ -58,7 +62,12 @@ export function EntryForm({
   const [confirmId, setConfirmId] = useState<string | null>(null);
 
   const { readings: dayReadings, loading: dayLoading } = useDayReadings(uid, date);
-  const appliedKey = useRef(initial ? `${initial.date}|${initial.kind}|${initial.slot ?? ''}` : '');
+  /*
+   * Une création démarre vide : le segment de départ est déjà « appliqué », donc le relevé
+   * éventuellement enregistré sur ce créneau n'est pas recopié dans le champ. Il ne l'est
+   * qu'ensuite, quand on change de date, de type ou de moment.
+   */
+  const appliedKey = useRef(`${startDate}|${startKind}|${startSlot}`);
 
   const existing = dayReadings.find((reading) => readingMatches(reading, kind, slot));
   const gajSaved = dayReadings.find((reading) => reading.kind === 'gaj');
@@ -66,7 +75,8 @@ export function EntryForm({
 
   const parsed = Number(raw.replace(',', '.'));
   const value = raw.trim() !== '' && Number.isFinite(parsed) ? parsed : null;
-  const tone = value != null ? statusTone[statusOf(value)] : null;
+  const status = value != null ? statusOf(value, kind) : null;
+  const tone = status ? statusTone[status] : null;
 
   /*
    * Changer de date, de type ou de moment recharge ce qui est déjà enregistré :
@@ -114,7 +124,7 @@ export function EntryForm({
         kind,
         slot: targetSlot,
         time: time || defaultTimeFor(kind, slot),
-        value: Math.round(value * 100) / 100,
+        value: Math.round(value * 10) / 10,
         note: note.trim(),
         updatedAt: serverTimestamp(),
       });
@@ -153,7 +163,7 @@ export function EntryForm({
           type="button"
           onClick={onCancel}
           aria-label="Retour au mois"
-          className="-ml-2 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-muted transition-colors hover:bg-soft hover:text-ink"
+          className="-ml-2 flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-muted transition-colors hover:bg-soft hover:text-ink"
         >
           <IconArrowLeft className="h-[18px] w-[18px]" />
         </button>
@@ -172,12 +182,12 @@ export function EntryForm({
             <button
               type="button"
               onClick={() => setDate(todayISO())}
-              className="h-7 rounded-full border border-line px-2.5 text-[12px] text-ink-2 transition-colors hover:bg-soft"
+              className="h-11 rounded-full border border-line px-3.5 text-[12px] text-ink-2 transition-colors hover:bg-soft"
             >
               Aujourd'hui
             </button>
           </div>
-          <div className="mt-1.5 grid grid-cols-2 gap-2.5">
+          <div className="mt-1.5 grid grid-cols-[1.4fr_1fr] gap-2.5">
             <div className="min-w-0">
               <label htmlFor="date" className="sr-only">
                 Date
@@ -187,7 +197,7 @@ export function EntryForm({
                 type="date"
                 value={date}
                 onChange={(event) => setDate(event.target.value)}
-                className={field}
+                className={dateTimeField}
               />
             </div>
             <div className="min-w-0">
@@ -199,7 +209,7 @@ export function EntryForm({
                 type="time"
                 value={time}
                 onChange={(event) => setTime(event.target.value)}
-                className={field}
+                className={dateTimeField}
               />
             </div>
           </div>
@@ -287,7 +297,6 @@ export function EntryForm({
               id="gaj"
               inputMode="decimal"
               autoComplete="off"
-              placeholder="1,05"
               value={raw}
               onChange={(event) => {
                 setRaw(event.target.value);
@@ -295,16 +304,16 @@ export function EntryForm({
               }}
               className="tnum min-w-0 flex-1 bg-transparent font-display text-[1.7rem] font-semibold leading-tight tracking-[-0.03em] outline-none placeholder:text-muted/35 focus-visible:outline-none"
             />
-            <span className="shrink-0 text-[13px] text-muted">g/L</span>
+            <span className="shrink-0 text-[13px] text-muted">mmol/L</span>
           </div>
 
-          <CorridorScale value={value} />
+          <CorridorScale value={value} kind={kind} />
 
           <p
             className={`mt-1 flex items-center gap-1.5 text-[12px] ${tone ? tone.text : 'text-muted'}`}
           >
             <span className={`h-1.5 w-1.5 rounded-full ${tone ? tone.dot : 'bg-muted/50'}`} />
-            {tone ? tone.label : 'Saisissez la valeur mesurée'}
+            {status ? statusLabel(status, kind) : 'Saisissez la valeur mesurée'}
           </p>
         </section>
 
