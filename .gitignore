@@ -1,0 +1,7 @@
+node_modules
+dahsboard-design-skill
+.freebuff
+dist
+.env
+.env.local
+*.local
