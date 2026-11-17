@@ -232,7 +232,7 @@ export function MonthDashboard({
       </section>
 
       <div className="mt-3 lg:mt-4">
-        <ReadingList readings={readings} onEdit={onEdit} onAdd={onAdd} />
+        <ReadingList key={monthKey} readings={readings} onEdit={onEdit} onAdd={onAdd} />
       </div>
     </div>
   );

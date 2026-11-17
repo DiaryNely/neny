@@ -26,6 +26,8 @@
   --color-accent: #0c6b5c;
   --color-on-accent: #ffffff;
   --color-warn: #a8620b;
+  /* Jaune « validation d'une modification » ; l'encre foncée garde le contraste. */
+  --color-edit: #e8b93c;
   --color-low: #a33a2e;
   --color-tip: #17241f;
 

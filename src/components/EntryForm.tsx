@@ -70,6 +70,8 @@ export function EntryForm({
   const appliedKey = useRef(`${startDate}|${startKind}|${startSlot}`);
 
   const existing = dayReadings.find((reading) => readingMatches(reading, kind, slot));
+  /* Ouvert depuis le journal : c'est une modification, même avant le chargement du jour. */
+  const editing = Boolean(initial) || Boolean(existing);
   const gajSaved = dayReadings.find((reading) => reading.kind === 'gaj');
   const gppSaved = dayReadings.filter((reading) => reading.kind === 'gpp');
 
@@ -341,9 +343,15 @@ export function EntryForm({
         <button
           type="submit"
           disabled={saving}
-          className="h-12 w-full rounded-xl bg-accent text-[15px] font-medium text-on-accent transition-opacity hover:opacity-95 disabled:opacity-60"
+          className={`h-12 w-full rounded-xl text-[15px] font-medium transition-opacity hover:opacity-95 disabled:opacity-60 ${
+            editing ? 'bg-edit text-ink' : 'bg-accent text-on-accent'
+          }`}
         >
-          {saving ? 'Enregistrement…' : 'Enregistrer le relevé'}
+          {saving
+            ? 'Enregistrement…'
+            : editing
+              ? 'Valider la modification'
+              : 'Enregistrer le relevé'}
         </button>
 
         {existing &&
@@ -353,7 +361,7 @@ export function EntryForm({
                 type="button"
                 disabled={saving}
                 onClick={() => handleDelete(existing)}
-                className="h-11 flex-1 rounded-xl bg-low/10 text-[13px] font-medium text-low disabled:opacity-60"
+                className="h-11 flex-1 rounded-xl bg-low text-[13px] font-medium text-white disabled:opacity-60"
               >
                 Confirmer la suppression
               </button>
@@ -369,7 +377,7 @@ export function EntryForm({
             <button
               type="button"
               onClick={() => setConfirmId(existing.id)}
-              className="h-11 w-full rounded-xl text-[13px] text-muted transition-colors hover:bg-soft hover:text-low"
+              className="h-11 w-full rounded-xl border border-low/30 bg-low/5 text-[13px] font-medium text-low transition-colors hover:bg-low/10"
             >
               Supprimer ce relevé
             </button>
