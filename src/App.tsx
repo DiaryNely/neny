@@ -9,6 +9,7 @@ import type { Reading } from './lib/types';
 import { AppShell, type ViewName } from './components/AppShell';
 import { AuthScreen } from './components/AuthScreen';
 import { Brand } from './components/Brand';
+import { DoctorReport } from './components/DoctorReport';
 import { EntryForm } from './components/EntryForm';
 import { MonthDashboard } from './components/MonthDashboard';
 import { Settings } from './components/Settings';
@@ -19,7 +20,13 @@ type View =
   | { name: 'compte' };
 
 export default function App() {
-  return firebaseConfigured ? <Root /> : <ConfigNotice />;
+  if (!firebaseConfigured) return <ConfigNotice />;
+
+  // Lien du médecin : `?d=<jeton>`, consultable sans connexion.
+  const token = new URLSearchParams(window.location.search).get('d');
+  if (token) return <DoctorReport token={token} />;
+
+  return <Root />;
 }
 
 function Root() {

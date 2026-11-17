@@ -104,6 +104,33 @@
   font-feature-settings: "tnum" 1;
 }
 
+/*
+  Impression / PDF du rapport médecin : A4, fond blanc, couleurs conservées
+  (la bande cible et les statuts restent lisibles une fois imprimés).
+*/
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 12mm;
+  }
+
+  html,
+  body {
+    background: #fff !important;
+  }
+
+  *,
+  *::before,
+  *::after {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .print-hidden {
+    display: none !important;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

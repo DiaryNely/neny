@@ -20,7 +20,8 @@ La configuration Firebase vit dans `.env` (modèle dans `.env.example`) et repre
    Il n'y a pas d'inscription dans l'application, chaque accès est créé à la main ici.
 3. **Firestore Database** : créer la base, puis coller le contenu de `firestore.rules`
    dans l'onglet *Rules* et publier. Chaque personne ne peut lire et écrire que
-   `users/{sonUid}/readings/*`.
+   `users/{sonUid}/readings/*` ; la collection `shares` sert au lien du médecin (voir
+   plus bas) et reste lisible sans authentification.
 
 ## Données
 
@@ -51,6 +52,19 @@ Réenregistrer le même créneau met à jour l'existant au lieu de le dupliquer.
 ```
 
 Les relevés enregistrés avant l'arrivée du GAJ (sans champ `kind`) sont lus comme des GPP.
+
+## Lien pour le médecin
+
+Dans **Compte → Partage avec le médecin**, l'application crée un lien
+`…/?d=<jeton>` qui ouvre un rapport **sans aucune identification** : statistiques de la
+période, moyennes par moment, graphiques GAJ et GPP mois par mois, relevés jour par jour,
+et un bouton **Imprimer / Enregistrer en PDF** (mise en page A4, couleurs conservées).
+
+Le lien ne donne pas accès au compte. À sa création, un **instantané** des relevés des
+90 derniers jours est copié dans `shares/{jeton}` : ce document est lisible publiquement
+par qui connaît le jeton (16 octets aléatoires), et seul le propriétaire peut le créer,
+le mettre à jour ou le supprimer. « Mettre à jour » réécrit l'instantané avec les relevés
+du jour ; « Révoquer » le supprime et rend le lien inutilisable.
 
 ## Seuils
 

@@ -9,7 +9,8 @@ interface Props {
   kind: Kind;
   monthKey: string;
   days: number;
-  onAdd: () => void;
+  /** Absent sur le rapport imprimable : aucune action de saisie n'y est proposée. */
+  onAdd?: () => void;
 }
 
 type Point = { day: number; value: number };
@@ -368,13 +369,15 @@ export function GlucoseChart({ readings, kind, monthKey, days, onAdd }: Props) {
       {isEmpty && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
           <p className="text-[13px] text-muted">Aucun relevé ce mois-ci</p>
-          <button
-            type="button"
-            onClick={onAdd}
-            className="rounded-full border border-line bg-card px-3.5 py-2 text-[13px] font-medium shadow-card transition-colors hover:bg-soft"
-          >
-            Ajouter un relevé
-          </button>
+          {onAdd && (
+            <button
+              type="button"
+              onClick={onAdd}
+              className="rounded-full border border-line bg-card px-3.5 py-2 text-[13px] font-medium shadow-card transition-colors hover:bg-soft"
+            >
+              Ajouter un relevé
+            </button>
+          )}
         </div>
       )}
     </div>
