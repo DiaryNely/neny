@@ -375,7 +375,7 @@ export function GlucoseChart({ readings, kind, monthKey, days, onAdd }: Props) {
               onClick={onAdd}
               className="rounded-full border border-line bg-card px-3.5 py-2 text-[13px] font-medium shadow-card transition-colors hover:bg-soft"
             >
-              Ajouter un relevé
+              {kind === 'gaj' ? 'Saisir un GAJ' : 'Saisir un GPP'}
             </button>
           )}
         </div>

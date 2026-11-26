@@ -3,20 +3,27 @@ import { signOut } from 'firebase/auth';
 import { auth, firebaseConfigured } from './lib/firebase';
 import { useAuth } from './hooks/useAuth';
 import { useMonthReadings, useRecentReadings } from './hooks/useReadings';
+import { useMonthWeights } from './hooks/useWeights';
 import { currentMonthKey, monthKeyOf } from './lib/dates';
 import type { Slot } from './lib/dates';
 import type { Reading } from './lib/types';
 import { AppShell, type ViewName } from './components/AppShell';
+import { AddChooser } from './components/AddChooser';
 import { AuthScreen } from './components/AuthScreen';
 import { Brand } from './components/Brand';
 import { DoctorReport } from './components/DoctorReport';
-import { EntryForm } from './components/EntryForm';
+import { GajForm } from './components/GajForm';
+import { GppForm } from './components/GppForm';
 import { MonthDashboard } from './components/MonthDashboard';
 import { Settings } from './components/Settings';
+import { WeightForm } from './components/WeightForm';
 
 type View =
   | { name: 'mois' }
-  | { name: 'ajouter'; initial?: Reading; date?: string; slot?: Slot }
+  | { name: 'ajouter' }
+  | { name: 'gaj'; initial?: Reading; date?: string }
+  | { name: 'gpp'; initial?: Reading; date?: string; slot?: Slot }
+  | { name: 'poids' }
   | { name: 'compte' };
 
 export default function App() {
@@ -45,6 +52,8 @@ function Root() {
   // 90 jours : la période de l'HbA1c estimée.
   const { readings: recent } = useRecentReadings(user?.uid ?? null);
 
+  const { weights, loading: weightsLoading } = useMonthWeights(user?.uid ?? null, monthKey);
+
   useEffect(() => {
     window.scrollTo({ top: 0 });
   }, [view]);
@@ -60,16 +69,11 @@ function Root() {
 
   const navigate = (name: ViewName) => setView({ name } as View);
 
-  const handleSaved = (date: string) => {
+  /** Retour au mois affiché, sur le mois de la date enregistrée, avec un message. */
+  const backToMonth = (date: string, message: string) => {
     setMonthKey(monthKeyOf(date));
     setView({ name: 'mois' });
-    setToast('Relevé enregistré.');
-  };
-
-  const handleDeleted = (date: string) => {
-    setMonthKey(monthKeyOf(date));
-    setView({ name: 'mois' });
-    setToast('Relevé supprimé.');
+    setToast(message);
   };
 
   return (
@@ -83,19 +87,59 @@ function Root() {
           error={error}
           monthKey={monthKey}
           onMonthChange={setMonthKey}
-          onAdd={() => setView({ name: 'ajouter' })}
-          onEdit={(reading) => setView({ name: 'ajouter', initial: reading })}
+          weights={weights}
+          weightsLoading={weightsLoading}
+          onAddGaj={() => setView({ name: 'gaj' })}
+          onAddGpp={() => setView({ name: 'gpp' })}
+          onAddWeight={() => setView({ name: 'poids' })}
+          onEdit={(reading) =>
+            setView(
+              reading.kind === 'gaj'
+                ? { name: 'gaj', initial: reading }
+                : { name: 'gpp', initial: reading },
+            )
+          }
         />
       )}
 
       {view.name === 'ajouter' && (
-        <EntryForm
+        <AddChooser
+          onPick={(target) => {
+            if (target === 'gaj') setView({ name: 'gaj' });
+            else if (target === 'gpp') setView({ name: 'gpp' });
+            else setView({ name: 'poids' });
+          }}
+        />
+      )}
+
+      {view.name === 'gaj' && (
+        <GajForm
+          uid={user.uid}
+          initial={view.initial}
+          initialDate={view.date}
+          onSaved={(date) => backToMonth(date, 'GAJ enregistré.')}
+          onDeleted={(date) => backToMonth(date, 'GAJ supprimé.')}
+          onCancel={() => setView({ name: 'mois' })}
+        />
+      )}
+
+      {view.name === 'gpp' && (
+        <GppForm
           uid={user.uid}
           initial={view.initial}
           initialDate={view.date}
           initialSlot={view.slot}
-          onSaved={handleSaved}
-          onDeleted={handleDeleted}
+          onSaved={(date) => backToMonth(date, 'GPP enregistré.')}
+          onDeleted={(date) => backToMonth(date, 'GPP supprimé.')}
+          onCancel={() => setView({ name: 'mois' })}
+        />
+      )}
+
+      {view.name === 'poids' && (
+        <WeightForm
+          uid={user.uid}
+          onSaved={(date) => backToMonth(date, 'Poids enregistré.')}
+          onDeleted={(date) => backToMonth(date, 'Poids supprimé.')}
           onCancel={() => setView({ name: 'mois' })}
         />
       )}
@@ -132,10 +176,7 @@ function ConfigNotice() {
           Renseignez les identifiants du projet dans un fichier <code>.env</code> à la racine :
         </p>
         <pre className="mt-3 overflow-x-auto rounded-xl bg-soft p-3 text-[12px] leading-relaxed text-ink-2">
-          {`VITE_FIREBASE_API_KEY=…
-VITE_FIREBASE_AUTH_DOMAIN=…
-VITE_FIREBASE_PROJECT_ID=…
-VITE_FIREBASE_APP_ID=…`}
+          {`VITE_FIREBASE_API_KEY=…\nVITE_FIREBASE_AUTH_DOMAIN=…\nVITE_FIREBASE_PROJECT_ID=…\nVITE_FIREBASE_APP_ID=…`}
         </pre>
         <p className="mt-3 text-[12px] text-muted">
           Le modèle complet se trouve dans <code>.env.example</code>. Redémarrez ensuite le serveur

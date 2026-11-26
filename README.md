@@ -51,7 +51,35 @@ Réenregistrer le même créneau met à jour l'existant au lieu de le dupliquer.
 }
 ```
 
+L’observation se choisit avec des cases à cocher : plusieurs options sont possibles
+(activité physique, stress, trouble de sommeil, alimentation excessive, sucrerie ou autre).
+Le champ de précision apparaît lorsque « Autre » est coché. Les anciennes observations
+libres restent affichées comme « Autre ».
+
 Les relevés enregistrés avant l'arrivée du GAJ (sans champ `kind`) sont lus comme des GPP.
+
+Chaque mesure a son propre écran de saisie, regroupés par l'onglet **Ajouter** :
+
+- **Nouveau GAJ** — `GajForm` : date, heure, valeur (un seul par jour) ;
+- **Nouveau GPP** — `GppForm` : date, heure, moment (matin / midi / soir), valeur ;
+- **Nouveau poids** — `WeightForm` : jour, poids en kg.
+
+Aucun formulaire ne mélange deux types de relevé.
+
+## Poids
+
+Un poids par jour, en kilogrammes, dans `users/{uid}/weights/{AAAA-MM-JJ}` :
+
+```ts
+{
+  date: 'AAAA-MM-JJ',
+  value: 72.4, // kg
+  note: '',
+}
+```
+
+Le tableau de bord affiche le dernier poids, l'écart depuis le premier relevé du mois et la
+courbe du mois (`WeightChart`).
 
 ## Lien pour le médecin
 

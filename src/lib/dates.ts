@@ -10,8 +10,8 @@ export const slotLabel: Record<Slot, string> = {
 
 /** Heure proposée par défaut quand on saisit un relevé d'un autre jour. */
 export const slotDefaultTime: Record<Slot, string> = {
-  matin: '06:00',
-  midi: '12:00',
+  matin: '08:00',
+  midi: '14:00',
   soir: '21:00',
 };
 

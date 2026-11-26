@@ -10,11 +10,12 @@ const DAYS_PER_PAGE = 7;
 interface Props {
   readings: Reading[];
   onEdit: (reading: Reading) => void;
-  onAdd: () => void;
+  onAddGaj: () => void;
+  onAddGpp: () => void;
 }
 
 /** Liste groupée par jour : la date ne s'écrit qu'une fois par groupe. */
-export function ReadingList({ readings, onEdit, onAdd }: Props) {
+export function ReadingList({ readings, onEdit, onAddGaj, onAddGpp }: Props) {
   const groups = new Map<string, Reading[]>();
   for (const reading of readings) {
     const list = groups.get(reading.date);
@@ -48,13 +49,22 @@ export function ReadingList({ readings, onEdit, onAdd }: Props) {
       {readings.length === 0 ? (
         <div className="flex flex-col items-center gap-3 border-t border-line px-4 py-10">
           <p className="text-[13px] text-muted">Les relevés du mois apparaîtront ici.</p>
-          <button
-            type="button"
-            onClick={onAdd}
-            className="rounded-full border border-line px-3.5 py-2 text-[13px] font-medium transition-colors hover:bg-soft"
-          >
-            Ajouter un relevé
-          </button>
+          <div className="flex flex-wrap items-center justify-center gap-2">
+            <button
+              type="button"
+              onClick={onAddGaj}
+              className="rounded-full border border-line px-3.5 py-2 text-[13px] font-medium transition-colors hover:bg-soft"
+            >
+              Saisir un GAJ
+            </button>
+            <button
+              type="button"
+              onClick={onAddGpp}
+              className="rounded-full border border-line px-3.5 py-2 text-[13px] font-medium transition-colors hover:bg-soft"
+            >
+              Saisir un GPP
+            </button>
+          </div>
         </div>
       ) : (
         <ul className="border-t border-line">

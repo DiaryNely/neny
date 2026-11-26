@@ -3,21 +3,18 @@ import { deleteDoc, doc, serverTimestamp, setDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useDayReadings } from '../hooks/useReadings';
 import type { Reading } from '../lib/types';
-import {
-  KINDS,
-  kindDefaultTime,
-  kindLabel,
-  kindLongLabel,
-  readingKey,
-  readingMatches,
-  type Kind,
-} from '../lib/types';
+import { readingKey } from '../lib/types';
 import { SLOTS, longDateLabel, slotDefaultTime, slotLabel, todayISO } from '../lib/dates';
 import type { Slot } from '../lib/dates';
 import { fmtG, statusLabel, statusOf, statusTone } from '../lib/glucose';
 import { CorridorScale } from './CorridorScale';
 import { IconArrowLeft } from './icons';
+import { ObservationField } from './ObservationField';
 
+/**
+ * Saisie du GPP seul : un relevé par moment de la journée.
+ * Le GAJ a son propre formulaire (`GajForm`), les deux ne se mélangent plus.
+ */
 interface Props {
   uid: string;
   initial?: Reading;
@@ -31,14 +28,9 @@ interface Props {
 const card = 'rounded-2xl border border-line bg-card p-4 shadow-card';
 const field =
   'h-11 w-full min-w-0 rounded-xl border border-line bg-soft/40 px-2.5 tnum transition-colors focus:border-accent/50';
-/* Sous 360 px, l'icône native mange la place du texte : on la retire, le champ reste cliquable. */
 const dateTimeField = `${field} max-[359px]:[&::-webkit-calendar-picker-indicator]:hidden`;
 
-function defaultTimeFor(kind: Kind, slot: Slot): string {
-  return kind === 'gaj' ? kindDefaultTime.gaj : slotDefaultTime[slot];
-}
-
-export function EntryForm({
+export function GppForm({
   uid,
   initial,
   initialDate,
@@ -48,59 +40,47 @@ export function EntryForm({
   onCancel,
 }: Props) {
   const startDate = initial?.date ?? initialDate ?? todayISO();
-  const startKind: Kind = initial?.kind ?? (initialSlot ? 'gpp' : 'gaj');
   const startSlot: Slot = initial?.slot ?? initialSlot ?? 'matin';
 
   const [date, setDate] = useState(startDate);
-  const [kind, setKind] = useState<Kind>(startKind);
   const [slot, setSlot] = useState<Slot>(startSlot);
-  const [time, setTime] = useState(initial?.time ?? defaultTimeFor(startKind, startSlot));
+  const [time, setTime] = useState(initial?.time || slotDefaultTime[startSlot]);
   const [raw, setRaw] = useState(initial ? String(initial.value).replace('.', ',') : '');
   const [note, setNote] = useState(initial?.note ?? '');
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [confirmId, setConfirmId] = useState<string | null>(null);
+  const [confirm, setConfirm] = useState(false);
 
-  const { readings: dayReadings, loading: dayLoading } = useDayReadings(uid, date);
-  /*
-   * Une création démarre vide : le segment de départ est déjà « appliqué », donc le relevé
-   * éventuellement enregistré sur ce créneau n'est pas recopié dans le champ. Il ne l'est
-   * qu'ensuite, quand on change de date, de type ou de moment.
-   */
-  const appliedKey = useRef(`${startDate}|${startKind}|${startSlot}`);
+  const { readings, loading } = useDayReadings(uid, date);
+  const savedGpp = readings.filter((reading) => reading.kind === 'gpp');
+  const saved = savedGpp.find((reading) => reading.slot === slot) ?? null;
+  const editing = Boolean(initial) || Boolean(saved);
 
-  const existing = dayReadings.find((reading) => readingMatches(reading, kind, slot));
-  /* Ouvert depuis le journal : c'est une modification, même avant le chargement du jour. */
-  const editing = Boolean(initial) || Boolean(existing);
-  const gajSaved = dayReadings.find((reading) => reading.kind === 'gaj');
-  const gppSaved = dayReadings.filter((reading) => reading.kind === 'gpp');
+  /* Une création démarre vide : le jour et le moment de départ sont déjà « appliqués ». */
+  const appliedKey = useRef(`${startDate}|${startSlot}`);
 
   const parsed = Number(raw.replace(',', '.'));
   const value = raw.trim() !== '' && Number.isFinite(parsed) ? parsed : null;
-  const status = value != null ? statusOf(value, kind) : null;
+  const status = value != null ? statusOf(value, 'gpp') : null;
   const tone = status ? statusTone[status] : null;
 
-  /*
-   * Changer de date, de type ou de moment recharge ce qui est déjà enregistré :
-   * le GAJ et chaque moment du GPP sont des relevés indépendants.
-   */
   useEffect(() => {
-    if (dayLoading) return;
-    const key = `${date}|${kind}|${slot}`;
+    if (loading) return;
+    const key = `${date}|${slot}`;
     if (appliedKey.current === key) return;
     appliedKey.current = key;
 
-    const saved = dayReadings.find((reading) => readingMatches(reading, kind, slot));
-    if (saved) {
-      setRaw(String(saved.value).replace('.', ','));
-      setTime(saved.time || defaultTimeFor(kind, slot));
-      setNote(saved.note);
+    const existing = readings.find((reading) => reading.kind === 'gpp' && reading.slot === slot);
+    if (existing) {
+      setRaw(String(existing.value).replace('.', ','));
+      setTime(existing.time || slotDefaultTime[slot]);
+      setNote(existing.note);
     } else {
       setRaw('');
-      setTime(defaultTimeFor(kind, slot));
+      setTime(slotDefaultTime[slot]);
       setNote('');
     }
-  }, [date, kind, slot, dayReadings, dayLoading]);
+  }, [date, slot, readings, loading]);
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -117,21 +97,19 @@ export function EntryForm({
     setSaving(true);
     setError(null);
 
-    const targetSlot = kind === 'gaj' ? null : slot;
-    const id = readingKey(date, kind, targetSlot);
+    const id = readingKey(date, 'gpp', slot);
 
     try {
       await setDoc(doc(db, 'users', uid, 'readings', id), {
         date,
-        kind,
-        slot: targetSlot,
-        time: time || defaultTimeFor(kind, slot),
+        kind: 'gpp',
+        slot,
+        time: time || slotDefaultTime[slot],
         value: Math.round(value * 10) / 10,
         note: note.trim(),
         updatedAt: serverTimestamp(),
       });
 
-      // Un relevé déplacé (autre date, autre type, autre moment) ne doit pas rester en double.
       if (initial && initial.id !== id) {
         try {
           await deleteDoc(doc(db, 'users', uid, 'readings', initial.id));
@@ -171,9 +149,11 @@ export function EntryForm({
         </button>
         <div>
           <h1 className="font-display text-[1.3rem] leading-none">
-            {existing ? 'Modifier le relevé' : 'Nouveau relevé'}
+            {editing ? 'Modifier le GPP' : 'Nouveau GPP'}
           </h1>
-          <p className="mt-1 text-[12px] text-muted">{longDateLabel(date)}</p>
+          <p className="mt-1 text-[12px] text-muted">
+            Après repas · {slotLabel[slot]} · {longDateLabel(date)}
+          </p>
         </div>
       </div>
 
@@ -191,11 +171,11 @@ export function EntryForm({
           </div>
           <div className="mt-1.5 grid grid-cols-[1.4fr_1fr] gap-2.5">
             <div className="min-w-0">
-              <label htmlFor="date" className="sr-only">
+              <label htmlFor="gpp-date" className="sr-only">
                 Date
               </label>
               <input
-                id="date"
+                id="gpp-date"
                 type="date"
                 value={date}
                 onChange={(event) => setDate(event.target.value)}
@@ -203,11 +183,11 @@ export function EntryForm({
               />
             </div>
             <div className="min-w-0">
-              <label htmlFor="time" className="sr-only">
+              <label htmlFor="gpp-time" className="sr-only">
                 Heure
               </label>
               <input
-                id="time"
+                id="gpp-time"
                 type="time"
                 value={time}
                 onChange={(event) => setTime(event.target.value)}
@@ -218,85 +198,43 @@ export function EntryForm({
         </section>
 
         <section className={card}>
-          <span className="text-[12px] text-muted">Type de mesure</span>
-          <div className="mt-2 grid grid-cols-2 gap-2">
-            {KINDS.map((option) => {
-              const active = kind === option;
-              const count = gppSaved.length;
-              const countLabel =
-                count > 0 ? `${count} relevé${count > 1 ? 's' : ''}` : '—';
-
+          <span className="text-[12px] text-muted">Moment du repas</span>
+          <div className="mt-2 grid grid-cols-3 gap-2">
+            {SLOTS.map((option) => {
+              const existing = savedGpp.find((reading) => reading.slot === option);
+              const active = slot === option;
               return (
                 <button
                   key={option}
                   type="button"
-                  onClick={() => setKind(option)}
+                  onClick={() => setSlot(option)}
                   aria-pressed={active}
-                  className={`flex flex-col items-start gap-0.5 rounded-xl border px-3 py-2.5 text-left transition-colors ${
+                  className={`flex flex-col items-center gap-0.5 rounded-xl border px-2 py-2.5 transition-colors ${
                     active
                       ? 'border-accent bg-accent text-on-accent'
                       : 'border-line bg-soft/40 text-ink hover:bg-soft'
                   }`}
                 >
-                  <span className="text-[13px] font-medium">{kindLabel[option]}</span>
-                  <span className={`text-[11px] ${active ? 'text-white/75' : 'text-muted'}`}>
-                    {kindLongLabel[option]}
-                  </span>
-                  <span className={`tnum text-[12px] ${active ? 'text-white' : 'text-ink-2'}`}>
-                    {option === 'gaj'
-                      ? gajSaved
-                        ? fmtG(gajSaved.value)
-                        : '—'
-                      : countLabel}
+                  <span className="text-[13px] font-medium">{slotLabel[option]}</span>
+                  <span className={`tnum text-[11px] ${active ? 'text-white/70' : 'text-muted'}`}>
+                    {existing ? fmtG(existing.value) : '—'}
                   </span>
                 </button>
               );
             })}
           </div>
           <p className="mt-2 text-[11px] leading-relaxed text-muted">
-            {kind === 'gaj'
-              ? 'Un seul GAJ par jour, le matin au réveil.'
-              : 'Après un repas : indiquez le moment de la journée.'}
+            Un GPP par moment : matin, midi ou soir. Chaque moment se remplit séparément.
           </p>
         </section>
 
-        {kind === 'gpp' && (
-          <section className={card}>
-            <span className="text-[12px] text-muted">Moment</span>
-            <div className="mt-2 grid grid-cols-3 gap-2">
-              {SLOTS.map((option) => {
-                const saved = gppSaved.find((reading) => reading.slot === option);
-                const active = slot === option;
-                return (
-                  <button
-                    key={option}
-                    type="button"
-                    onClick={() => setSlot(option)}
-                    aria-pressed={active}
-                    className={`flex flex-col items-center gap-0.5 rounded-xl border px-2 py-2.5 transition-colors ${
-                      active
-                        ? 'border-accent bg-accent text-on-accent'
-                        : 'border-line bg-soft/40 text-ink hover:bg-soft'
-                    }`}
-                  >
-                    <span className="text-[13px] font-medium">{slotLabel[option]}</span>
-                    <span className={`tnum text-[11px] ${active ? 'text-white/70' : 'text-muted'}`}>
-                      {saved ? fmtG(saved.value) : '—'}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </section>
-        )}
-
         <section className={card}>
-          <label htmlFor="gaj" className="text-[12px] text-muted">
-            Glycémie {kind === 'gaj' ? '— GAJ' : '— GPP'}
+          <label htmlFor="gpp-value" className="text-[12px] text-muted">
+            Glycémie post-prandiale
           </label>
           <div className="mt-1.5 flex items-baseline gap-2 rounded-xl border border-line bg-soft/40 px-3 py-2 focus-within:border-accent/50 focus-within:ring-2 focus-within:ring-accent/15">
             <input
-              id="gaj"
+              id="gpp-value"
               inputMode="decimal"
               autoComplete="off"
               value={raw}
@@ -309,30 +247,17 @@ export function EntryForm({
             <span className="shrink-0 text-[13px] text-muted">mmol/L</span>
           </div>
 
-          <CorridorScale value={value} kind={kind} />
+          <CorridorScale value={value} kind="gpp" />
 
           <p
             className={`mt-1 flex items-center gap-1.5 text-[12px] ${tone ? tone.text : 'text-muted'}`}
           >
             <span className={`h-1.5 w-1.5 rounded-full ${tone ? tone.dot : 'bg-muted/50'}`} />
-            {status ? statusLabel(status, kind) : 'Saisissez la valeur mesurée'}
+            {status ? statusLabel(status, 'gpp') : 'Saisissez la valeur mesurée'}
           </p>
         </section>
 
-        <section className={card}>
-          <label htmlFor="note" className="flex items-baseline justify-between">
-            <span className="text-[12px] text-muted">Observation</span>
-            <span className="text-[11px] text-muted">facultatif</span>
-          </label>
-          <textarea
-            id="note"
-            rows={3}
-            value={note}
-            onChange={(event) => setNote(event.target.value)}
-            placeholder="Repas, activité, stress, sommeil…"
-            className="mt-1.5 w-full resize-none rounded-xl border border-line bg-soft/40 px-3 py-2.5 leading-relaxed transition-colors focus:border-accent/50"
-          />
-        </section>
+        <ObservationField id="gpp-note" value={note} onChange={setNote} />
 
         {error && (
           <p role="alert" className="text-[13px] text-low">
@@ -347,27 +272,23 @@ export function EntryForm({
             editing ? 'bg-edit text-ink' : 'bg-accent text-on-accent'
           }`}
         >
-          {saving
-            ? 'Enregistrement…'
-            : editing
-              ? 'Valider la modification'
-              : 'Enregistrer le relevé'}
+          {saving ? 'Enregistrement…' : editing ? 'Valider la modification' : 'Enregistrer le GPP'}
         </button>
 
-        {existing &&
-          (confirmId === existing.id ? (
+        {saved &&
+          (confirm ? (
             <div className="flex gap-2">
               <button
                 type="button"
                 disabled={saving}
-                onClick={() => handleDelete(existing)}
+                onClick={() => handleDelete(saved)}
                 className="h-11 flex-1 rounded-xl bg-low text-[13px] font-medium text-white disabled:opacity-60"
               >
                 Confirmer la suppression
               </button>
               <button
                 type="button"
-                onClick={() => setConfirmId(null)}
+                onClick={() => setConfirm(false)}
                 className="h-11 flex-1 rounded-xl border border-line text-[13px]"
               >
                 Annuler
@@ -376,10 +297,10 @@ export function EntryForm({
           ) : (
             <button
               type="button"
-              onClick={() => setConfirmId(existing.id)}
+              onClick={() => setConfirm(true)}
               className="h-11 w-full rounded-xl border border-low/30 bg-low/5 text-[13px] font-medium text-low transition-colors hover:bg-low/10"
             >
-              Supprimer ce relevé
+              Supprimer ce GPP
             </button>
           ))}
       </form>

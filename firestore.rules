@@ -9,6 +9,11 @@ service cloud.firestore {
       allow read, write: if request.auth != null && request.auth.uid == uid;
     }
 
+    // Poids du jour : un document par date, réservé au propriétaire.
+    match /users/{uid}/weights/{date} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+
     // Lien du médecin : lecture publique d'un instantané identifié par un jeton
     // aléatoire (`?d=…`). Le document ne contient que les relevés copiés au moment
     // du partage, pas d'accès à la collection de l'utilisateur.

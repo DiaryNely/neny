@@ -4,6 +4,7 @@ import type { Slot } from '../lib/dates';
 import {
   SLOTS,
   currentMonthKey,
+  dayLabel,
   daysInMonth,
   monthLabel,
   monthShort,
@@ -27,8 +28,10 @@ import {
   scalePercent,
   targetBand,
 } from '../lib/glucose';
+import { fmtKg, fmtKgSigned, type Weight } from '../lib/weight';
 import { GlucoseChart } from './GlucoseChart';
 import { ReadingList } from './ReadingList';
+import { WeightChart } from './WeightChart';
 import { IconChevronLeft, IconChevronRight } from './icons';
 
 type MomentFilter = 'tous' | Slot;
@@ -42,7 +45,11 @@ interface Props {
   error: string | null;
   monthKey: string;
   onMonthChange: (monthKey: string) => void;
-  onAdd: () => void;
+  weights: Weight[];
+  weightsLoading: boolean;
+  onAddGaj: () => void;
+  onAddGpp: () => void;
+  onAddWeight: () => void;
   onEdit: (reading: Reading) => void;
 }
 
@@ -54,7 +61,11 @@ export function MonthDashboard({
   error,
   monthKey,
   onMonthChange,
-  onAdd,
+  weights,
+  weightsLoading,
+  onAddGaj,
+  onAddGpp,
+  onAddWeight,
   onEdit,
 }: Props) {
   const [momentFilter, setMomentFilter] = useState<MomentFilter>('tous');
@@ -188,7 +199,7 @@ export function MonthDashboard({
           monthKey={monthKey}
           days={days}
           loading={skeleton}
-          onAdd={onAdd}
+          onAdd={onAddGaj}
         />
 
         <ChartCard
@@ -199,7 +210,7 @@ export function MonthDashboard({
           monthKey={monthKey}
           days={days}
           loading={skeleton}
-          onAdd={onAdd}
+          onAdd={onAddGpp}
           filters={
             <>
               <Chip active={momentFilter === 'tous'} onClick={() => setMomentFilter('tous')}>
@@ -219,6 +230,15 @@ export function MonthDashboard({
         />
       </div>
 
+      <div className="mt-3">
+        <WeightCard
+          weights={weights}
+          days={days}
+          loading={weightsLoading}
+          onAdd={onAddWeight}
+        />
+      </div>
+
       <section className="mt-3 rounded-2xl border border-line bg-card p-4 shadow-card sm:p-5">
         <header className="flex items-baseline justify-between gap-3">
           <h2 className="font-display text-[15px] font-semibold">Moyennes par moment</h2>
@@ -232,7 +252,13 @@ export function MonthDashboard({
       </section>
 
       <div className="mt-3 lg:mt-4">
-        <ReadingList key={monthKey} readings={readings} onEdit={onEdit} onAdd={onAdd} />
+        <ReadingList
+          key={monthKey}
+          readings={readings}
+          onEdit={onEdit}
+          onAddGaj={onAddGaj}
+          onAddGpp={onAddGpp}
+        />
       </div>
     </div>
   );
@@ -477,6 +503,74 @@ function A1cCard({ readings, loading }: { readings: Reading[]; loading?: boolean
           Ajoutez des relevés pour l’estimer : elle se calcule sur l’ensemble des mesures.
         </p>
       )}
+    </section>
+  );
+}
+
+/**
+ * Poids du mois : dernier relevé, évolution depuis le premier du mois et courbe.
+ * Un relevé par jour, en kg.
+ */
+function WeightCard({
+  weights,
+  days,
+  loading,
+  onAdd,
+}: {
+  weights: Weight[];
+  days: number;
+  loading: boolean;
+  onAdd: () => void;
+}) {
+  const first = weights[0] ?? null;
+  const last = weights[weights.length - 1] ?? null;
+  const delta = first && last && weights.length > 1 ? last.value - first.value : null;
+
+  return (
+    <section className="rounded-2xl border border-line bg-card p-4 shadow-card sm:p-5">
+      <header className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
+        <div className="min-w-0">
+          <h2 className="font-display text-[15px] font-semibold">Poids</h2>
+          <p className="mt-0.5 text-[11px] text-muted">
+            {weights.length} relevé{weights.length > 1 ? 's' : ''} · kg
+          </p>
+        </div>
+        <div className="text-right">
+          {loading ? (
+            <div className="h-6 w-16 animate-pulse rounded bg-soft" />
+          ) : (
+            <>
+              <p className="tnum font-display text-[15px] font-semibold leading-none">
+                {fmtKg(last?.value)}
+                <span className="ml-1 text-[11px] font-normal text-muted">kg</span>
+              </p>
+              <p className="tnum mt-1 text-[11px] text-muted">
+                {delta != null && first && last
+                  ? `${fmtKgSigned(delta)} depuis le ${dayLabel(first.date)}`
+                  : last
+                    ? `le ${dayLabel(last.date)}`
+                    : 'Aucun relevé'}
+              </p>
+            </>
+          )}
+        </div>
+      </header>
+
+      <div className="mt-2">
+        {loading ? (
+          <div className="h-[208px] animate-pulse rounded-xl bg-soft/70 md:h-[246px]" />
+        ) : (
+          <WeightChart weights={weights} days={days} />
+        )}
+      </div>
+
+      <button
+        type="button"
+        onClick={onAdd}
+        className="mt-3 h-11 w-full rounded-xl border border-line text-[13px] font-medium text-ink-2 transition-colors hover:bg-soft"
+      >
+        {last ? 'Ajouter ou modifier le poids du jour' : 'Ajouter le poids du jour'}
+      </button>
     </section>
   );
 }

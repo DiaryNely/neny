@@ -3,7 +3,7 @@ import type { User } from 'firebase/auth';
 import { Brand } from './Brand';
 import { IconCalendar, IconPlus, IconUser } from './icons';
 
-export type ViewName = 'mois' | 'ajouter' | 'compte';
+export type ViewName = 'mois' | 'ajouter' | 'gaj' | 'gpp' | 'poids' | 'compte';
 
 interface Props {
   user: User;
@@ -21,6 +21,10 @@ const tabs: { name: ViewName; label: string }[] = [
 
 export function AppShell({ user, view, onNavigate, toast, children }: Props) {
   const initial = (user.email ?? '?').charAt(0).toUpperCase();
+  /* « Ajouter » reste actif pendant les formulaires de saisie, tous séparés. */
+  const isActive = (name: ViewName) =>
+    view === name ||
+    (name === 'ajouter' && (view === 'gaj' || view === 'gpp' || view === 'poids'));
 
   return (
     <div className="flex min-h-dvh flex-col">
@@ -41,9 +45,9 @@ export function AppShell({ user, view, onNavigate, toast, children }: Props) {
                 key={tab.name}
                 type="button"
                 onClick={() => onNavigate(tab.name)}
-                aria-current={view === tab.name ? 'page' : undefined}
+                aria-current={isActive(tab.name) ? 'page' : undefined}
                 className={`h-9 rounded-lg px-3 text-[13px] transition-colors ${
-                  view === tab.name
+                  isActive(tab.name)
                     ? 'bg-accent/8 font-medium text-accent ring-1 ring-inset ring-accent/20'
                     : 'text-muted hover:bg-soft/70 hover:text-ink'
                 }`}
@@ -84,20 +88,20 @@ export function AppShell({ user, view, onNavigate, toast, children }: Props) {
         <div className="mx-auto grid max-w-md grid-cols-3">
           <TabButton
             label="Mois"
-            active={view === 'mois'}
+            active={isActive('mois')}
             onClick={() => onNavigate('mois')}
             icon={<IconCalendar className="h-[18px] w-[18px]" />}
           />
           <TabButton
             label="Ajouter"
-            active={view === 'ajouter'}
+            active={isActive('ajouter')}
             onClick={() => onNavigate('ajouter')}
             accent
             icon={<IconPlus className="h-[18px] w-[18px]" />}
           />
           <TabButton
             label="Compte"
-            active={view === 'compte'}
+            active={isActive('compte')}
             onClick={() => onNavigate('compte')}
             icon={<IconUser className="h-[18px] w-[18px]" />}
           />
